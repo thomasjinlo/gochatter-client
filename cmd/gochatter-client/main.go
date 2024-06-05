@@ -12,7 +12,7 @@ type PushMessage struct {
 }
 
 func main() {
-	c, _, err := websocket.DefaultDialer.Dial("ws://localhost:8444/connect", nil)
+	c, _, err := websocket.DefaultDialer.Dial("wss://gochatter.app:2096/connect", nil)
 	if err != nil {
 		log.Fatalf("[gochatter-client] received error while dialing %v", err)
 	}
