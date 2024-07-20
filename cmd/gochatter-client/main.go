@@ -3,27 +3,35 @@ package main
 import (
 	"log"
 
-	"github.com/gorilla/websocket"
+	"github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
+	"github.com/thomasjinlo/gochatter-client/internal/api"
+	"github.com/thomasjinlo/gochatter-client/internal/tui"
+	"github.com/thomasjinlo/gochatter-client/internal/ws"
 )
 
-type PushMessage struct {
-	Author  string
-	Content string
-}
-
 func main() {
-	c, _, err := websocket.DefaultDialer.Dial("wss://gochatter.app:2096/connect", nil)
-	if err != nil {
-		log.Fatalf("[gochatter-client] received error while dialing %v", err)
-	}
+	zone.NewGlobal()
+	wc := ws.NewClient()
+	api := api.NewClient()
+	cm := tui.NewChatModel(wc, api)
+	lm := tui.NewLoginModel(wc, api, cm)
+	p := tea.NewProgram(lm, tea.WithMouseCellMotion())
 
-	defer c.Close()
-
-	for {
-		_, msg, err := c.ReadMessage()
-		if err != nil {
-			log.Fatalf("[gochatter-client] received error while reading message %v", err)
+	// Schedule messages from websocket server
+	go func() {
+		for {
+			select {
+			case msg, ok := <-wc.MsgCh:
+				if !ok {
+					p.Kill()
+				}
+				p.Send(msg)
+			}
 		}
-		log.Printf("[gochatter-client] received message from %s\n", msg)
+	}()
+
+	if _, err := p.Run(); err != nil {
+		log.Fatal(err)
 	}
 }
