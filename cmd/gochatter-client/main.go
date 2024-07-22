@@ -2,34 +2,45 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/thomasjinlo/gochatter-client/internal/api"
+	"github.com/thomasjinlo/gochatter-client/internal/push"
 	"github.com/thomasjinlo/gochatter-client/internal/tui"
-	"github.com/thomasjinlo/gochatter-client/internal/ws"
 )
 
 func main() {
+	var localhost bool
+	for i := 1; i < len(os.Args); i++ {
+		switch os.Args[i] {
+		case "-l", "--localhost":
+			localhost = true
+		}
+	}
+	pushServerEndpoint := "wss://ws.gochatter.app:2053"
+	apiEndpoint := "https://api.gochatter.app:8443"
+	if localhost {
+		pushServerEndpoint = "ws://localhost:8444"
+		apiEndpoint = "http://localhost:8443"
+	}
+
+	ps := push.NewServer(pushServerEndpoint)
+
 	zone.NewGlobal()
-	wc := ws.NewClient()
-	api := api.NewClient()
-	cm := tui.NewChatModel(wc, api)
-	lm := tui.NewLoginModel(wc, api, cm)
+	api := api.NewClient(apiEndpoint)
+	cm := tui.NewChatModel(api)
+	lm := tui.NewLoginModel(ps, api, cm)
 	p := tea.NewProgram(lm, tea.WithMouseCellMotion())
 
-	// Schedule messages from websocket server
-	go func() {
-		for {
-			select {
-			case msg, ok := <-wc.MsgCh:
-				if !ok {
-					p.Kill()
-				}
-				p.Send(msg)
-			}
+	ps.Subscribe(func(msg push.Message, ok bool) {
+		if !ok {
+			p.Quit()
 		}
-	}()
+
+		p.Send(msg)
+	})
 
 	if _, err := p.Run(); err != nil {
 		log.Fatal(err)

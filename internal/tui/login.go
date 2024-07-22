@@ -6,11 +6,12 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/thomasjinlo/gochatter-client/internal/api"
-	"github.com/thomasjinlo/gochatter-client/internal/ws"
+	"github.com/thomasjinlo/gochatter-client/internal/push"
 )
 
+
 type LoginModel struct {
-	ws       *ws.Client
+	ps       push.Server
 	api      *api.Client
 	wm       tea.Msg
 	cm       tea.Model
@@ -18,12 +19,12 @@ type LoginModel struct {
 	ti       textinput.Model
 }
 
-func NewLoginModel(ws *ws.Client, api *api.Client, cm tea.Model) *LoginModel {
+func NewLoginModel(ps push.Server, api *api.Client, cm tea.Model) *LoginModel {
 	ti := textinput.New()
 	ti.Focus()
 	ti.CharLimit = 250
 	return &LoginModel{
-		ws:  ws,
+		ps:  ps,
 		api: api,
 		cm:  cm,
 		ti:  ti,
@@ -51,7 +52,9 @@ func (lm *LoginModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				lm.loginErr = true
 				return lm, tiCmd
 			}
-			go lm.ws.Connect(username)
+			if err := lm.ps.Connect(username); err != nil {
+				return nil, func() tea.Msg { return tea.Quit() }
+			}
 			getUsersCmd := func() tea.Msg { return lm.api.GetUsers() }
 			usernameCmd := func() tea.Msg { return UsernameMsg(username) }
 			windowCmd := func() tea.Msg { return lm.wm }

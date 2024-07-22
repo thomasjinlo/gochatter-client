@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	// "math"
 	"regexp"
 	"time"
 
@@ -14,15 +13,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/thomasjinlo/gochatter-client/internal/api"
-	"github.com/thomasjinlo/gochatter-client/internal/ws"
+	"github.com/thomasjinlo/gochatter-client/internal/push"
 )
 
 type ChatModel struct {
 	username  string
 	liFocused bool
-	msgCh     chan ws.DirectMessage
 	dms       map[string]string
-	ws        *ws.Client
 	api       *api.Client
 	li        list.Model
 	ta        textarea.Model
@@ -34,7 +31,7 @@ type ChatModel struct {
 type UsernameMsg string
 type displayDMMsg string
 
-func NewChatModel(wsClient *ws.Client, apiClient *api.Client) tea.Model {
+func NewChatModel(apiClient *api.Client) tea.Model {
 	ta := textarea.New()
 	ta.Prompt = "> "
 	ta.CharLimit = 250
@@ -55,7 +52,6 @@ func NewChatModel(wsClient *ws.Client, apiClient *api.Client) tea.Model {
 		ta:  ta,
 		vp:  vp,
 		li:  li,
-		ws:  wsClient,
 		api: apiClient,
 		ms:  lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
 		bs:  lipgloss.NewStyle().Border(lipgloss.RoundedBorder()),
@@ -85,7 +81,6 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case UsernameMsg:
 		m.username = string(msg)
-		m.vp.SetContent(m.username)
 	case []api.User:
 		var items []list.Item
 		for _, u := range msg {
@@ -96,13 +91,13 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.li.SetItems(items)
 		cmds = append(cmds, m.pollUsers())
-	case ws.DirectMessage:
+	case push.DirectMessage:
 		if messages, ok := m.dms[msg.Author]; ok {
 			m.dms[msg.Author] = messages + "\n" + fmt.Sprintf("%s: %s", msg.Author, msg.Content)
 		} else {
 			m.dms[msg.Author] = fmt.Sprintf("%s: %s", msg.Author, msg.Content)
 		}
-		if m.li.SelectedItem().FilterValue() == msg.Author {
+		if u, ok := m.li.SelectedItem().(*userItem); ok && u.id == msg.Author {
 			cmds = append(cmds, m.displayDMCmd(msg.Author))
 		}
 	case tea.KeyMsg:
@@ -112,7 +107,8 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case tea.KeyEnter:
 			if selectedUser := m.li.SelectedItem(); selectedUser != nil {
-				targetUserId := selectedUser.FilterValue()
+				u, _ := selectedUser.(*userItem)
+				targetUserId := u.id
 				m.api.SendDirectMessage(m.username, targetUserId, m.ta.Value())
 				m.dms[targetUserId] = m.dms[targetUserId] + "\n" + fmt.Sprintf("You: %s", m.ta.Value())
 				cmds = append(cmds, m.displayDMCmd(targetUserId))
@@ -165,18 +161,6 @@ func (m *ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 				return m, nil
-
-				// targetCursor := (msg.Y - 5) / 3
-				// currCursor := m.li.Cursor()
-				// diff := math.Abs(float64(targetCursor - currCursor))
-				// for i := 0; i < int(diff); i++ {
-				// 	if currCursor < targetCursor {
-				// 		m.li.CursorDown()
-				// 	} else {
-				// 		m.li.CursorUp()
-				// 	}
-				// }
-				// cmds = append(cmds, m.displayDMCmd(m.li.SelectedItem().FilterValue()))
 			}
 		}
 	case displayDMMsg:

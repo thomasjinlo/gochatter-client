@@ -9,12 +9,12 @@ import (
 	"sort"
 )
 
-const domain = "https://api.gochatter.app:8443"
+type Client struct {
+	endpoint string
+}
 
-type Client struct{}
-
-func NewClient() *Client {
-	return &Client{}
+func NewClient(endpoint string) *Client {
+	return &Client{endpoint: endpoint}
 }
 
 type User struct {
@@ -39,7 +39,7 @@ type GetUsersBody struct {
 
 func (c *Client) GetUsers() []User {
 	client := &http.Client{}
-	url := domain + "/users"
+	url := c.endpoint + "/users"
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		log.Printf("Error calling getting users %s", err)
@@ -71,12 +71,13 @@ type DirectMessageRequest struct {
 
 func (c *Client) SendDirectMessage(senderId, receiverId, content string) int {
 	client := &http.Client{}
-	url := domain + "/direct_message"
+	url := c.endpoint + "/direct_message"
 	dm := DirectMessageRequest{
 		SourceAccountId: senderId,
 		TargetAccountId: receiverId,
 		Content:         content,
 	}
+	
 	b, err := json.Marshal(dm)
 	if err != nil {
 		log.Printf("Error marshalling direct message request %s", err)
@@ -99,7 +100,7 @@ type LoginRequest struct {
 
 func (c *Client) Login(username string) bool {
 	client := &http.Client{}
-	url := domain + "/login"
+	url := c.endpoint + "/login"
 	lr := LoginRequest{Username: username}
 	b, err := json.Marshal(lr)
 	if err != nil {
